@@ -1,0 +1,24 @@
+{
+  "name": "voipdog-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server exposing the VOIP.dog backend (3CX + Bitrix24 audits and integrations) to LLM agents (Claude Code, Gemini, OpenAI).",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "voipdog-mcp": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "start:http": "node src/index.js --http",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
