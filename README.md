@@ -13,40 +13,28 @@ inherits the same data permissions the user has in the web app.
 
 ## Quick start
 
-### 1. Install
-
 ```bash
-cd VOIP.dog-mcp-server
-npm install
+npx voipdog-mcp install
 ```
 
-### 2. Get an API token
+This single command:
+1. Opens your browser to **Settings → API Tokens** so you can generate a token
+2. Prompts you to paste it (input is masked)
+3. Verifies the token works
+4. Detects your MCP hosts (Claude Code, Claude Desktop, Cursor, Gemini CLI)
+   and writes the `voipdog` server entry into each one you select
 
-In the web app: **Settings → API Tokens → Generate token**. Pick a label (e.g.
-`Claude Code (laptop)`) and a lifetime (90 days is a good default). Copy the
-token — it starts with `voipdog_pat_` and is only shown once.
+Restart your MCP host and you're done.
 
-> SSO users (Microsoft / Google) and email users alike can use this. The token
-> is independent of your login provider.
+> Until the package is published to npm, run it from a checkout:
+> ```bash
+> cd VOIP.dog-mcp-server && npm install && node src/index.js install
+> ```
 
-### 3. Configure
+### Manual install (any host the installer doesn't detect)
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-VOIPDOG_API_BASE_URL=https://api.voip.dog/api
-VOIPDOG_SESSION_TOKEN=voipdog_pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-### 4. Wire it into your agent
-
-#### Claude Code
-
-Add to `~/.claude/mcp.json` (or your project `.mcp.json`):
+The installer drops this entry into your host config; if you'd rather edit by
+hand, that's all you need:
 
 ```json
 {
@@ -63,48 +51,43 @@ Add to `~/.claude/mcp.json` (or your project `.mcp.json`):
 }
 ```
 
-#### Gemini CLI
+| Host | Config path |
+|---|---|
+| Claude Code (CLI) | `~/.claude.json` |
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
 
-In `~/.gemini/settings.json`:
+### Remote / self-hosted (Streamable HTTP)
 
-```json
-{
-  "mcpServers": {
-    "voipdog": {
-      "command": "node",
-      "args": ["/absolute/path/to/VOIP.dog-mcp-server/src/index.js"],
-      "env": {
-        "VOIPDOG_API_BASE_URL": "https://api.voip.dog/api",
-        "VOIPDOG_SESSION_TOKEN": "voipdog_pat_..."
-      }
-    }
-  }
-}
-```
-
-#### Anything else (OpenAI Agents, custom MCP clients)
-
-Run as a subprocess and connect over stdio, or run with `--http` and connect
-over Streamable HTTP at `http://127.0.0.1:8765/mcp`.
+For OpenAI Agents SDK or any remote consumer, run the server with `--http`:
 
 ```bash
-npm run start:http
+node src/index.js --http
+# → http://127.0.0.1:8765/mcp
 ```
+
+`MCP_HTTP_HOST` and `MCP_HTTP_PORT` override the bind. The HTTP transport is
+not authenticated by itself — put it behind your own auth proxy if you expose
+it publicly.
 
 ---
 
 ## Authentication
 
-Two modes, in priority order:
+The MCP server reads credentials from environment variables only:
 
-1. **API token** (recommended) — set `VOIPDOG_SESSION_TOKEN`. Works for SSO and
-   email users. Generate from **Settings → API Tokens** in the web app.
-2. **Email + password** — set `VOIPDOG_EMAIL` + `VOIPDOG_PASSWORD`. The MCP
-   server signs in via `POST /api/auth/signin` and auto-refreshes. Only works
-   for `provider="email"` accounts; SSO accounts must use option 1.
+- `VOIPDOG_API_BASE_URL` (required)
+- `VOIPDOG_SESSION_TOKEN` — a Personal Access Token (recommended)
+- *or* `VOIPDOG_EMAIL` + `VOIPDOG_PASSWORD` — only for `provider="email"`
+  accounts; SSO accounts must use a PAT
 
-The MCP server stores nothing on disk; tokens live only in memory after the
-sign-in call (when applicable).
+The installer writes these into your MCP host's config. Hosts then inject them
+into the server's environment when they spawn it.
+
+PATs are generated from **Settings → API Tokens** in the web
+app. They start with `voipdog_pat_`, are stored hashed in the backend, and can
+be revoked at any time from the same panel.
 
 ---
 
@@ -228,9 +211,10 @@ reserved for MCP framing in stdio mode).
 ```
 VOIP.dog-mcp-server/
 ├── src/
-│   ├── index.js              # entry: stdio default, --http for HTTP
+│   ├── index.js              # entry: subcommand router (server | install | help)
+│   ├── install.js            # interactive installer (prompt + write host config)
 │   ├── server.js             # MCP server factory; registers all tools
-│   ├── config.js             # env parsing
+│   ├── config.js             # env-var resolution
 │   ├── client/
 │   │   ├── apiClient.js      # fetch wrapper, auth, retries
 │   │   └── auth.js           # token mgmt (PAT / signin / refresh)

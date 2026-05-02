@@ -1,6 +1,21 @@
 import { z } from "zod";
 import { safeHandler } from "./_helpers.js";
 
+// Bitrix CRM stores PHONE/EMAIL as arrays of {VALUE, VALUE_TYPE} objects.
+// Plain-string values silently no-op on add/update. Normalize agent-friendly
+// strings to the expected shape; arrays pass through.
+function normalizeBitrixFields(fields) {
+  if (!fields || typeof fields !== "object") return fields;
+  const out = { ...fields };
+  for (const key of ["PHONE", "EMAIL"]) {
+    const v = out[key];
+    if (typeof v === "string" && v.trim()) {
+      out[key] = [{ VALUE: v.trim(), VALUE_TYPE: "WORK" }];
+    }
+  }
+  return out;
+}
+
 const ownerTypeId = z
   .union([z.literal("3"), z.literal("4"), z.literal(3), z.literal(4)])
   .describe("Bitrix owner type id: 3=Contact, 4=Company")
@@ -123,7 +138,9 @@ export function registerBitrixTools(server, api) {
         ADDRESS_POSTAL_CODE: z.string().optional(),
       },
     },
-    safeHandler((body) => api.post("/bitrix/contact", body))
+    safeHandler((fields) =>
+      api.post("/bitrix/contact", { fields: normalizeBitrixFields(fields) })
+    )
   );
 
   server.registerTool(
@@ -138,7 +155,11 @@ export function registerBitrixTools(server, api) {
           .describe("Object of Bitrix contact fields to update"),
       },
     },
-    safeHandler(({ id, fields }) => api.put(`/bitrix/contact/${id}`, fields))
+    safeHandler(({ id, fields }) =>
+      api.put(`/bitrix/contact/${id}`, {
+        fields: normalizeBitrixFields(fields),
+      })
+    )
   );
 
   server.registerTool(
@@ -155,7 +176,9 @@ export function registerBitrixTools(server, api) {
         ADDRESS_POSTAL_CODE: z.string().optional(),
       },
     },
-    safeHandler((body) => api.post("/bitrix/company", body))
+    safeHandler((fields) =>
+      api.post("/bitrix/company", { fields: normalizeBitrixFields(fields) })
+    )
   );
 
   server.registerTool(
@@ -168,7 +191,11 @@ export function registerBitrixTools(server, api) {
         fields: z.record(z.any()),
       },
     },
-    safeHandler(({ id, fields }) => api.put(`/bitrix/company/${id}`, fields))
+    safeHandler(({ id, fields }) =>
+      api.put(`/bitrix/company/${id}`, {
+        fields: normalizeBitrixFields(fields),
+      })
+    )
   );
 
   server.registerTool(
@@ -221,7 +248,9 @@ export function registerBitrixTools(server, api) {
         fields: z.record(z.any()),
       },
     },
-    safeHandler(({ id, fields }) => api.put(`/bitrix/activity/${id}`, fields))
+    safeHandler(({ id, fields }) =>
+      api.put(`/bitrix/activity/${id}`, { fields })
+    )
   );
 
   server.registerTool(

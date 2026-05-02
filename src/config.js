@@ -22,7 +22,7 @@ export function loadConfig() {
 
   if (!sessionToken && !(email && password)) {
     throw new Error(
-      "Authentication required: set VOIPDOG_SESSION_TOKEN, or both VOIPDOG_EMAIL and VOIPDOG_PASSWORD."
+      `Authentication required. Run "npx voipdog-mcp install" or set VOIPDOG_SESSION_TOKEN (or VOIPDOG_EMAIL + VOIPDOG_PASSWORD) in your MCP host config.`
     );
   }
 

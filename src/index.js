@@ -1,11 +1,34 @@
 #!/usr/bin/env node
 import { loadConfig } from "./config.js";
 import { createMcpServer } from "./server.js";
+import { runInstall, printHelp } from "./install.js";
 
-const args = new Set(process.argv.slice(2));
-const useHttp = args.has("--http") || args.has("-h");
+const argv = process.argv.slice(2);
+const positional = argv.filter((a) => !a.startsWith("-"));
+const flags = new Set(argv.filter((a) => a.startsWith("-")));
+const subcommand = positional[0];
 
 async function main() {
+  if (flags.has("--help") || subcommand === "help") {
+    printHelp();
+    return;
+  }
+
+  switch (subcommand) {
+    case "install":
+      return runInstall();
+    case undefined:
+      return startServer();
+    default:
+      console.error(`[voipdog-mcp] unknown subcommand: ${subcommand}`);
+      printHelp();
+      process.exit(1);
+  }
+}
+
+async function startServer() {
+  const useHttp = flags.has("--http");
+
   let config;
   try {
     config = loadConfig();

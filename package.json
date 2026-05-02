@@ -8,6 +8,7 @@
     "voipdog-mcp": "src/index.js"
   },
   "scripts": {
+    "install:host": "node src/index.js install",
     "start": "node src/index.js",
     "start:http": "node src/index.js --http",
     "dev": "node --watch src/index.js"
