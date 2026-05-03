@@ -1,5 +1,17 @@
 {
-  "name": "voipdog-mcp-server",
+  "name": "voipdog-mcp",
+  "license": "MIT",
+  "author": "Deep Auras",
+  "homepage": "https://github.com/Deep-Auras/VOIP.dog-mcp-server",
+  "repository": { 
+    "type": "git", 
+    "url": "https://github.com/Deep-Auras/VOIP.dog-mcp-server.git" 
+  },
+  "bugs":  { 
+    "url": "https://github.com/Deep-Auras/VOIP.dog-mcp-server/issues" 
+  },
+  "keywords": ["mcp", "voip.dog", "3cx", "bitrix24", "claude-code"],
+  "files": ["src/", "README.md"],
   "version": "0.1.0",
   "description": "MCP server exposing the VOIP.dog backend (3CX + Bitrix24 audits and integrations) to LLM agents (Claude Code, Gemini, OpenAI).",
   "type": "module",
