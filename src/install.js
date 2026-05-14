@@ -18,7 +18,7 @@ const PAT_PREFIX = "voipdog_pat_";
 const ENVIRONMENTS = {
   production: {
     apiUrl: "https://api.voip.dog/api",
-    webUrl: "https://app.voip.dog",
+    webUrl: "https://voip.dog",
     serverKey: "voipdog",
   },
   testing: {
@@ -144,7 +144,11 @@ async function prompt(rl, question, { defaultValue } = {}) {
 }
 
 async function verifyToken(baseUrl, token) {
-  const res = await fetch(`${baseUrl}/auth/user`, {
+  // We hit /settings rather than /auth/user. /auth/user has its own pre-PAT
+  // inline session-token check (auth.js ~line 577) that doesn't recognize PATs
+  // and always 401s for them. /settings goes through the authenticateUser
+  // middleware which has the PAT branch.
+  const res = await fetch(`${baseUrl}/settings`, {
     headers: { authorization: `Bearer ${token}` },
   });
   const body = await res.json().catch(() => ({}));
@@ -156,13 +160,19 @@ async function verifyToken(baseUrl, token) {
 }
 
 function deriveWebUrl(apiBaseUrl) {
-  // The frontend lives at the same origin as the API for the
-  // tools.liberteks.com testing env, and at app.<domain> for production.
-  // Either way, drop the trailing /api and route to /settings#api-tokens.
+  // If the apiBaseUrl matches one of our known environments, use the
+  // env's webUrl. Otherwise (e.g. --api-url= override) fall back to a
+  // heuristic that drops `api.` from the hostname.
+  const knownEnv = Object.values(ENVIRONMENTS).find(
+    (e) => e.apiUrl.replace(/\/+$/, "") === apiBaseUrl.replace(/\/+$/, "")
+  );
+  if (knownEnv) {
+    return `${knownEnv.webUrl.replace(/\/+$/, "")}/settings#api-tokens`;
+  }
   try {
     const url = new URL(apiBaseUrl);
     if (url.hostname.startsWith("api.")) {
-      url.hostname = "app." + url.hostname.slice(4);
+      url.hostname = url.hostname.slice(4); // drop the `api.` prefix entirely
     }
     url.pathname = "/settings";
     url.hash = "api-tokens";
