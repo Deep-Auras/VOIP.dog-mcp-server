@@ -26,6 +26,47 @@ const direction = z
   .describe("Call direction: 1=inbound, 2=outbound")
   .transform((v) => String(v));
 
+// Mirror the activity-timeline description the backend audit script builds
+// (tools/3cx2bitrix-call-records-audit-script.js):
+//   "{date} {time} {Status} {Direction} call from {from} to {to}\n\nTranscription: {…}"
+// The backend create-call-activity route does NOT format anything — it stores
+// callRecord.description verbatim + the attribution footer. So if an agent
+// passes a thin string, the timeline entry is thin. This builds the canonical
+// text from structured fields when the caller hasn't supplied a full one.
+function buildCallDescription(callRecord) {
+  // If the caller passed a real, formatted description (e.g. the audit record's
+  // DESCRIPTION field verbatim), trust it. Heuristic: anything multi-line or
+  // longer than a bare ID counts as "already formatted".
+  const provided = (callRecord.description || "").trim();
+  if (provided && (provided.includes("\n") || provided.length > 40)) {
+    return provided;
+  }
+
+  const dir =
+    String(callRecord.direction) === "1"
+      ? "Inbound"
+      : String(callRecord.direction) === "2"
+        ? "Outbound"
+        : "";
+  const status = callRecord.status || "Answered";
+  const from = callRecord.fromName || callRecord.phoneNumber || "Unknown";
+  const to = callRecord.toName || "";
+  let when = "";
+  if (callRecord.startTime) {
+    const d = new Date(callRecord.startTime);
+    when = Number.isNaN(d.getTime())
+      ? callRecord.startTime
+      : `${d.toLocaleDateString("en-US")} ${d.toLocaleTimeString("en-US")}`;
+  }
+
+  const header = [when, status, dir, "call from", from, to ? `to ${to}` : ""]
+    .filter(Boolean)
+    .join(" ");
+  return callRecord.transcription
+    ? `${header}\n\nTranscription: ${callRecord.transcription}`
+    : header;
+}
+
 export function registerBitrixTools(server, api) {
   server.registerTool(
     "bitrix_search_contacts",
@@ -203,7 +244,18 @@ export function registerBitrixTools(server, api) {
     {
       title: "Create Bitrix call activity (3CX import)",
       description:
-        "Create a Bitrix24 call activity from a 3CX call record. Server-side handles attribution and (when description >500 chars) automatic .txt attachment. Do NOT include PROVIDER_ID/PROVIDER_TYPE_ID — defaults are correct.",
+        "Create a Bitrix24 call activity from a 3CX call record. The timeline " +
+        "entry text is built from the fields below — you do NOT need to format " +
+        "it yourself. IMPORTANT: when importing a record returned by " +
+        "audit_data_for_job / audit_export_for_job, pass that record's full " +
+        "DESCRIPTION string as `description` (it is already formatted). " +
+        "Otherwise omit `description` and provide the structured fields " +
+        "(direction, status, fromName, toName, transcription) and the server " +
+        "will format a proper entry. Do NOT pass a bare id like '3CX ID 65144'. " +
+        "Attribution and (for long text) a .txt attachment are added " +
+        "server-side. Do NOT include PROVIDER_ID/PROVIDER_TYPE_ID.\n\n" +
+        "For bulk audit imports prefer jobs_start_batch_missing_call_records, " +
+        "which formats every record server-side.",
       inputSchema: {
         ownerId: z.union([z.string(), z.number()]),
         ownerTypeId,
@@ -211,14 +263,44 @@ export function registerBitrixTools(server, api) {
           phoneNumber: z.string(),
           startTime: z.string().describe("ISO 8601 timestamp"),
           direction: direction.optional(),
-          description: z.string().optional(),
+          status: z
+            .string()
+            .optional()
+            .describe('Call status, e.g. "Answered" / "Unanswered" (default "Answered")'),
+          fromName: z
+            .string()
+            .optional()
+            .describe("Caller / source display name or number (SourceCallerId)"),
+          toName: z
+            .string()
+            .optional()
+            .describe("Destination display name (DestinationDisplayName)"),
           transcription: z.string().optional(),
+          description: z
+            .string()
+            .optional()
+            .describe(
+              "Pre-formatted timeline text. Pass the audit record's DESCRIPTION verbatim here when you have it; otherwise leave empty and the server builds it from the structured fields."
+            ),
           duration: z.number().optional(),
+          srcRecId: z
+            .union([z.string(), z.number()])
+            .optional()
+            .describe("3CX recording id — enables .wav attachment server-side"),
           settings: z.record(z.any()).optional(),
         }),
       },
     },
-    safeHandler((body) => api.post("/bitrix/create-call-activity", body))
+    safeHandler(({ ownerId, ownerTypeId, callRecord }) =>
+      api.post("/bitrix/create-call-activity", {
+        ownerId,
+        ownerTypeId,
+        callRecord: {
+          ...callRecord,
+          description: buildCallDescription(callRecord),
+        },
+      })
+    )
   );
 
   server.registerTool(
@@ -226,11 +308,20 @@ export function registerBitrixTools(server, api) {
     {
       title: "Batch create Bitrix activities",
       description:
-        "Create multiple Bitrix24 activities in one request. Returns per-item success/error.",
+        "Create multiple Bitrix24 activities in one request. Returns per-item " +
+        "success/error. NOTE: this is a low-level passthrough — each activity's " +
+        "DESCRIPTION is stored as-is (only attribution is appended server-side). " +
+        "Each DESCRIPTION must be the full formatted call text " +
+        "('{date} {status} {direction} call from {from} to {to}\\n\\nTranscription: …'), " +
+        "not a bare id. For importing missing records from an audit, prefer " +
+        "jobs_start_batch_missing_call_records — it formats every record " +
+        "server-side and needs no per-record text from you.",
       inputSchema: {
         activities: z
           .array(z.record(z.any()))
-          .describe("Array of activity payloads"),
+          .describe(
+            "Array of Bitrix activity field objects. Each should include a fully-formatted DESCRIPTION."
+          ),
       },
     },
     safeHandler(({ activities }) =>
@@ -297,11 +388,20 @@ export function registerBitrixTools(server, api) {
     {
       title: "Create contact/company from 3CX record",
       description:
-        "High-level: optionally create a contact and/or company from a 3CX call record. Mirrors the UI 'Send to Bitrix' flow.",
+        "High-level: optionally create a contact and/or company from a 3CX call " +
+        "record, then log the call on its timeline. Mirrors the UI 'Send to " +
+        "Bitrix' flow. The activity DESCRIPTION is taken from " +
+        "`contactRecord.DESCRIPTION` as-is (attribution appended server-side), " +
+        "so pass the audit record's full formatted DESCRIPTION there — not a " +
+        "bare id.",
       inputSchema: {
         createContact: z.boolean().optional(),
         createCompany: z.boolean().optional(),
-        contactRecord: z.record(z.any()),
+        contactRecord: z
+          .record(z.any())
+          .describe(
+            "3CX record fields. Include a fully-formatted DESCRIPTION (and PHONE_NUMBER, START_TIME) so the logged activity isn't thin."
+          ),
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         email: z.string().optional(),
