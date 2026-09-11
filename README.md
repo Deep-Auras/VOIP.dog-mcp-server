@@ -152,6 +152,7 @@ agent can self-correct.
 - `voicemail_list`, `voicemail_match`
 - `voicemail_search_keyword`, `voicemail_search_hybrid`
 - `voicemail_get_audio_url`
+- `voicemail_callback_tracker` — last-7-days voicemail callback triage (24h/48h/7d buckets + called-back items; optional `extension` filter)
 
 ### Transcripts (`transcript_*`)
 - `transcript_check_cache`, `transcript_check_cache_batch`

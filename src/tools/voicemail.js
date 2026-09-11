@@ -85,4 +85,27 @@ export function registerVoicemailTools(server, api, config) {
     },
     safeHandler(({ items }) => api.post("/voicemails/match", { items }))
   );
+
+  server.registerTool(
+    "voicemail_callback_tracker",
+    {
+      title: "Voicemail callback tracker (last 7 days)",
+      description:
+        "Fetches voicemails from the last 7 days and reports which ones have and have not been called back yet. " +
+        "Buckets un-returned voicemails by age (24h / 48h / 7d) so agents can prioritize follow-ups. " +
+        "Optional `extension` filter narrows to a single destination extension. " +
+        "Also returns the list of already-called-back items for reporting.",
+      inputSchema: {
+        extension: z
+          .string()
+          .optional()
+          .describe("Destination extension DN to filter by (e.g. \"17\")"),
+      },
+    },
+    safeHandler(({ extension }) =>
+      api.get("/voicemail-callback", {
+        query: extension ? { extension } : {},
+      })
+    )
+  );
 }
