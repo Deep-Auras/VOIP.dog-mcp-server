@@ -14,6 +14,19 @@ export function registerSettingsTools(server, api) {
   );
 
   server.registerTool(
+    "org_current",
+    {
+      title: "Get the current organization",
+      description:
+        "Which organization this token operates as — name, id, tier, status. " +
+        "Useful for confirming scope before making writes, since every other " +
+        "tool is implicitly scoped to this org.",
+      inputSchema: {},
+    },
+    safeHandler(() => api.get("/org/current"))
+  );
+
+  server.registerTool(
     "settings_validate_bitrix",
     {
       title: "Validate a Bitrix webhook URL",

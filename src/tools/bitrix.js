@@ -413,6 +413,71 @@ export function registerBitrixTools(server, api) {
   );
 
   server.registerTool(
+    "bitrix_batch_enrich_transcripts",
+    {
+      title: "Batch add transcripts to Bitrix activities",
+      description:
+        "Attach transcripts to many existing Bitrix activities in one call. " +
+        "Each record identifies the target activity and the transcript text.",
+      inputSchema: {
+        records: z
+          .array(z.record(z.any()))
+          .describe("Records carrying activity ids and transcript text"),
+      },
+    },
+    safeHandler(({ records }) => api.post("/bitrix/batch-enrich-transcripts", { records }))
+  );
+
+  server.registerTool(
+    "bitrix_remove_processed_record",
+    {
+      title: "Mark audit records as processed",
+      description:
+        "Remove already-imported records from an audit report's outstanding list so " +
+        "they stop showing as missing. Pass the `_metadata` of the records you " +
+        "imported (chunkDocId / arrayIndex), from audit_data_for_job.",
+      inputSchema: {
+        auditJobId: z.string(),
+        recordMetadata: z
+          .array(z.record(z.any()))
+          .describe("Array of _metadata objects for the processed records"),
+      },
+    },
+    safeHandler((body) => api.post("/bitrix/remove-processed-record", body))
+  );
+
+  server.registerTool(
+    "bitrix_remove_processed_transcript",
+    {
+      title: "Mark transcript records as processed",
+      description:
+        "Remove activities whose transcripts have been imported from an audit " +
+        "report's outstanding transcript list.",
+      inputSchema: {
+        auditJobId: z.string(),
+        activityIds: z.array(z.union([z.string(), z.number()])),
+      },
+    },
+    safeHandler((body) => api.post("/bitrix/remove-processed-transcript", body))
+  );
+
+  server.registerTool(
+    "bitrix_create_activity_raw",
+    {
+      title: "Create a Bitrix activity from raw fields",
+      description:
+        "Low-level escape hatch: creates an activity from a raw Bitrix fields " +
+        "object. Prefer bitrix_create_call_activity for 3CX call imports — it " +
+        "formats the timeline entry, adds attribution and handles attachments. " +
+        "Do NOT set PROVIDER_ID / PROVIDER_TYPE_ID; the defaults are correct.",
+      inputSchema: {
+        fields: z.record(z.any()).describe("Raw Bitrix activity fields"),
+      },
+    },
+    safeHandler(({ fields }) => api.post("/bitrix/activity", { fields }))
+  );
+
+  server.registerTool(
     "bitrix_merge_phone",
     {
       title: "Merge phone numbers",

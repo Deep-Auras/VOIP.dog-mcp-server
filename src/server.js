@@ -7,6 +7,8 @@ import { registerJobsTools } from "./tools/jobs.js";
 import { registerSettingsTools } from "./tools/settings.js";
 import { registerVoicemailTools } from "./tools/voicemail.js";
 import { registerTranscriptTools } from "./tools/transcript.js";
+import { registerCallerApiTools } from "./tools/callerapi.js";
+import { registerGeminiTools } from "./tools/gemini.js";
 
 export function createMcpServer(config) {
   // All logging goes to stderr so stdout stays clean for MCP framing.
@@ -34,6 +36,8 @@ export function createMcpServer(config) {
   registerSettingsTools(server, api);
   registerVoicemailTools(server, api, config);
   registerTranscriptTools(server, api);
+  registerCallerApiTools(server, api);
+  registerGeminiTools(server, api);
 
   return { server, log };
 }

@@ -132,6 +132,142 @@ export function registerJobsTools(server, api) {
   );
 
   server.registerTool(
+    "jobs_start_advanced_transcription",
+    {
+      title: "Start advanced transcription (3cx-crat) for a recording",
+      description:
+        "Run the 3cx-crat job: speech-to-text with speaker diarization, then " +
+        "Gemini analysis (summary, sentiment, action plan, coaching). This is " +
+        "the ONLY way to produce what transcript_check_cache reads.\n\n" +
+        "Identify the call by `recordingId` alone — duration, URL and start " +
+        "time are looked up for you.\n\n" +
+        "COST: this pays for speech-to-text across the entire recording. A " +
+        "2.5-hour call costs roughly $2-3 and takes many minutes. By default " +
+        "this tool refuses to start if a result already exists (use " +
+        "`force: true` to re-run anyway) and refuses recordings longer than " +
+        "`maxDurationHours`. Do not retry a failed job without reading its " +
+        "logs first — repeated runs repeat the charge.",
+      inputSchema: {
+        recordingId: z.union([z.string(), z.number()]).describe("3CX recording id, e.g. 66968"),
+        from: z.string().optional().describe("ISO date lower bound to narrow the lookup"),
+        to: z.string().optional().describe("ISO date upper bound to narrow the lookup"),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Re-run even if a transcription already exists. Default false."),
+        maxDurationHours: z
+          .number()
+          .optional()
+          .describe("Refuse recordings longer than this. Default 4."),
+      },
+    },
+    safeHandler(async ({ recordingId, from, to, force = false, maxDurationHours = 4 }) => {
+      const id = String(recordingId).trim();
+
+      // Resolve the recording — the job needs duration, URL and start time.
+      const search = await api.get("/3cx/recordings", {
+        query: {
+          q: id,
+          top: 25,
+          from: from || "2020-01-01",
+          to: to || new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+        },
+      });
+      const rec = (search?.items || []).find((r) => String(r.id) === id);
+      if (!rec) {
+        throw new Error(
+          `No 3CX recording found with id ${id}. Check the id, or pass from/to to widen the search.`
+        );
+      }
+      if (!rec.recordingUrl) {
+        throw new Error(`Recording ${id} has no recordingUrl — there is no audio to transcribe.`);
+      }
+
+      const durationSeconds = Number(rec.duration) || 0;
+      const durationHours = durationSeconds / 3600;
+
+      // Guard 1: don't pay twice for a result we already have.
+      if (!force) {
+        const filename = rec.recordingUrl.split("/").filter(Boolean).pop();
+        const existing = await api
+          .get(`/advanced-transcript/check-cache/${encodeURIComponent(filename)}`)
+          .catch(() => null);
+        if (existing?.cached) {
+          return {
+            started: false,
+            reason: "already_transcribed",
+            recordingId: id,
+            filename,
+            message:
+              "An advanced transcription already exists for this recording. " +
+              "Read it with transcript_check_cache, or pass force: true to re-run " +
+              "(which repeats the speech-to-text charge).",
+          };
+        }
+      }
+
+      // Guard 2: bound the spend on pathologically long recordings.
+      if (durationHours > maxDurationHours) {
+        throw new Error(
+          `Recording ${id} is ${durationHours.toFixed(2)} hours, over the ${maxDurationHours} hour limit. ` +
+            `Transcribing it would be expensive. Raise maxDurationHours only if that cost is intended.`
+        );
+      }
+
+      const job = await api.post("/jobs", {
+        type: "3cx-crat",
+        parameters: {
+          recId: id,
+          recDuration: durationSeconds,
+          recordingURL: rec.recordingUrl,
+          recStartTime: rec.startTime,
+        },
+      });
+
+      return {
+        started: true,
+        job,
+        recording: {
+          id: rec.id,
+          startTime: rec.startTime,
+          durationSeconds,
+          durationHours: Number(durationHours.toFixed(2)),
+          from: rec.fromDisplayName || rec.fromNumber,
+          to: rec.toDisplayName || rec.toNumber,
+        },
+        nextStep:
+          "Poll with jobs_wait_for_completion, then read the result with " +
+          "transcript_check_cache using the same recordingId.",
+      };
+    })
+  );
+
+  server.registerTool(
+    "jobs_start_recurring_invoice_import",
+    {
+      title: "Start recurring-invoice import (Bitrix)",
+      description:
+        "Run the recurring-invoices job: converts Bitrix24 recurring invoices into " +
+        "deals. Takes no parameters and writes to Bitrix in bulk — only run when " +
+        "explicitly asked.",
+      inputSchema: {},
+    },
+    safeHandler(() => api.post("/jobs", { type: "recurring-invoices", parameters: {} }))
+  );
+
+  server.registerTool(
+    "jobs_start_pending",
+    {
+      title: "Start a job that is pending",
+      description:
+        "Begin execution of a job currently in 'pending' state (e.g. one created " +
+        "but not auto-started). Use jobs_get first to confirm the status.",
+      inputSchema: { id: z.string() },
+    },
+    safeHandler(({ id }) => api.post(`/jobs/${id}/start`))
+  );
+
+  server.registerTool(
     "jobs_cancel",
     {
       title: "Cancel a running job",

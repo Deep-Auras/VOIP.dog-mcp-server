@@ -135,18 +135,31 @@ agent can self-correct.
 - `audit_dashboard_for_report`, `audit_data_for_job`
 - `audit_export_for_job`, `audit_export_for_range` — CSV or JSON
 
+### CallerAPI — phone reputation & spam (`callerapi_*`)
+- `callerapi_spam_score`, `callerapi_is_reported`, `callerapi_list_reported_numbers`
+- `callerapi_report_spam`, `callerapi_update_spam_reason`, `callerapi_delete_spam_report`
+- `callerapi_enrich_record`, `callerapi_validate`
+
+### Gemini (`gemini_*`)
+- `gemini_extract_contact` — pull structured contact fields out of a call description
+- `gemini_test`
+
 ### Background jobs (`jobs_*`)
 - `jobs_list_types`, `jobs_list`, `jobs_get`, `jobs_get_logs`
 - `jobs_start_3cx_audit` — kicks off a date-range audit
 - `jobs_start_batch_missing_call_records` — import missing 3CX activities
 - `jobs_start_batch_missing_transcripts` — backfill transcripts
 - `jobs_start_contact_activity_search`
+- `jobs_start_advanced_transcription` — **runs the 3cx-crat engine** that produces advanced transcriptions. Takes a `recordingId`; refuses if a result already exists or the call exceeds `maxDurationHours` (paid speech-to-text).
+- `jobs_start_recurring_invoice_import`
+- `jobs_start_pending` — begin a job left in `pending`
 - `jobs_cancel`, `jobs_delete`
 - `jobs_wait_for_completion` — polls until terminal status (great for agents)
 
 ### Settings (`settings_*`)
 - `settings_get` — read masked org+system config
 - `settings_validate_bitrix`, `settings_validate_3cx` — non-destructive credential tests
+- `org_current` — which organization this token acts as
 
 ### Voicemail (`voicemail_*`)
 - `voicemail_list`, `voicemail_match`
@@ -178,6 +191,18 @@ agent can self-correct.
 2. threecx_list_recordings({from, to, q: "+1..."})
 3. bitrix_create_call_activity({ ownerId, ownerTypeId: "3", callRecord: {...} })
 ```
+
+### Get an advanced transcription for a call
+```
+1. transcript_check_cache(recordingId: 66968)
+   → if cached, you're done — summary/sentiment/action plan/coaching returned
+2. jobs_start_advanced_transcription(recordingId: 66968)
+   → only if step 1 returned cached:false (this pays for speech-to-text)
+3. jobs_wait_for_completion(id)
+4. transcript_check_cache(recordingId: 66968)
+```
+Add `includeTranscript: true` in step 4 only if you need the verbatim text —
+a multi-hour call is ~112k characters.
 
 ---
 
