@@ -155,7 +155,8 @@ agent can self-correct.
 - `voicemail_callback_tracker` — last-7-days voicemail callback triage (24h/48h/7d buckets + called-back items; optional `extension` filter)
 
 ### Transcripts (`transcript_*`)
-- `transcript_check_cache`, `transcript_check_cache_batch`
+- `transcript_check_cache` — advanced transcription (summary, sentiment, action plan, coaching) by **`recordingId`** (e.g. `66968`) or `filename`. The full diarized transcript is omitted unless `includeTranscript: true`, since a long call runs to ~112k characters.
+- `transcript_check_cache_batch` — same lookup for up to 100 recordings at once; accepts `recordingIds` or `filenames`.
 
 ---
 

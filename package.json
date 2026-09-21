@@ -12,7 +12,7 @@
   },
   "keywords": ["mcp", "voip.dog", "3cx", "bitrix24", "claude-code"],
   "files": ["src/", "README.md"],
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "MCP server exposing the VOIP.dog backend (3CX + Bitrix24 audits and integrations) to LLM agents (Claude Code, Gemini, OpenAI).",
   "type": "module",
   "main": "src/index.js",
