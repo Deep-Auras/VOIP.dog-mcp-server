@@ -39,7 +39,16 @@ async function resolveFilename(api, { filename, recordingId, from, to }) {
     throw new Error(`Recording ${id} has no recordingUrl — nothing was recorded for this call.`);
   }
 
-  const segment = match.recordingUrl.split("/").filter(Boolean).pop();
+  // 3CX URL-encodes the path segment ("70**16" arrives as "70%2A%2A16"), but
+  // the 3cx-crat job caches under the DECODED name, as does the web client.
+  // Decode here so the lookup key matches; line below re-encodes for the URL.
+  const raw = match.recordingUrl.split("/").filter(Boolean).pop();
+  let segment = raw;
+  try {
+    segment = decodeURIComponent(raw);
+  } catch (_) {
+    // malformed escape: keep the raw segment
+  }
   return {
     filename: segment,
     resolvedFrom: "recordingId",
